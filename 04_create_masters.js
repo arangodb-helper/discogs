@@ -25,17 +25,49 @@
 	name2id[n.name] = n.id;
     }
 
+    print("loading masters oid-to-loc map");
+
+    cursor = db._query("FOR a IN releases2 FILTER a.master_id != 0 RETURN { id: a.master_id, loc: a.location }");
+
+    const countries = [ "US", "US", "US", "US", "GB", "GB", "GB", "JP", "DE", "DE", "FR", "RU" ];
+    let m = 0;
+
+    let oid2loc = {};
+
+    while (cursor.hasNext()) {
+	let n = cursor.next();
+	let l = n.loc;
+
+	if (l === null || l === undefined) {
+	    l = countries[m];
+	    m = (m + 1) % countries.length;
+	}
+
+	oid2loc[n.id] = l;
+    }
+
     print("creating entries in masters2");
 
-    cursor = db._query("FOR m IN masters RETURN m");
+    cursor = db._query("FOR m IN masters RETURN m._key");
 
     let artistsMap = {};
 
     while (cursor.hasNext()) {
-	let n = cursor.next();
+	let n = db.masters.document(cursor.next());
         let artists = n.artists;
+	let key = n.id;
+	let location = oid2loc[key];
+
+	if (location === null || location === undefined) {
+	    location = countries[m];
+	    m = (m + 1) % countries.length;
+	}
 
 	delete n.artists;
+
+	n.location = location;
+	n._key = location + ":" + key;
+	n.oid = key;
 
 	let id = db.masters2.save(n)._id;
 

@@ -7,54 +7,49 @@
     db._create("releases2");
 
     try {
-	db._drop("master_to_releases");
-    } catch (e) {
-    }
-
-    db._createEdgeCollection("master_to_releases");
-
-    try {
 	db._drop("label_to_releases");
     } catch (e) {
     }
 
     db._createEdgeCollection("label_to_releases");
 
-    print("loading masters title-to-id map");
-
-    let cursor = db._query("FOR m IN masters2 RETURN { id: m._id, name: m.title }");
-    let master2id = {};
-
-    while (cursor.hasNext()) {
-	let n = cursor.next();
-
-	master2id[n.name] = n.id;
-    }
-
     print("loading labels name-to-id map");
 
-    cursor = db._query("FOR l IN labels2 RETURN { id: l._id, name: l.name }");
+    cursor = db._query("FOR l IN labels2 RETURN { id: l._id, name: l.name, location: l.location }");
+
     let label2id = {};
+    let label2loc = {};
 
     while (cursor.hasNext()) {
 	let n = cursor.next();
 
 	label2id[n.name] = n.id;
+	label2loc[n.name] = n.location;
     }
 
     print("creating entries in releases2");
 
-    cursor = db._query("FOR r IN releases RETURN r");
+    cursor = db._query("FOR r IN releases RETURN r._key");
 
     let labelsMap = {};
-    let mastersMap = {};
 
     while (cursor.hasNext()) {
-	let n = cursor.next();
+	let n = db.releases.document(cursor.next());
         let title = n.title;
 	let labels = n.labels;
+	let location = "US";
+        let key = n.id;
 
+	if (labels.length > 0) {
+	    location = label2loc[labels[0].name] || "US";
+	}
+
+	delete n.id;
 	delete n.labels;
+
+	n.location = location;
+	n._key = n.location + ":" + key;
+	n.oid = key;
 
 	let id = db.releases2.save(n)._id;
 
@@ -72,31 +67,9 @@
 
 	    labelsMap[id].push(aid);
 	}
-
-	let mid = master2id[title];
-
-	if (mid !== "" && mid !== undefined) {
-	    if (!mastersMap.hasOwnProperty(mid)) {
-		mastersMap[mid] = [];
-	    }
-
-	    mastersMap[mid].push(id);
-	}
     }
 
-    print("creating master_to_releases relation");
-
-    for (let n in mastersMap) {
-	if (mastersMap.hasOwnProperty(n)) {
-	    let rels = mastersMap[n];
-
-	    for (let k = 0; k < rels.length; ++k) {
-		let t = rels[k];
-
-		db.master_to_releases.save({ "_from": n, "_to": t });
-	    }
-	}
-    }
+    db.releases2.ensureIndex({ type: "hash", fields: ["oid"] })
 
     print("creating label_to_releases relation");
 

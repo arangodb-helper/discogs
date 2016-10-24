@@ -1,11 +1,11 @@
 (function() {
     const countries = [ "US", "US", "US", "US", "GB", "GB", "GB", "JP", "DE", "DE", "FR", "RU" ];
 
-    print("finding location for roots");
+    print("finding location for root labels");
 
-    let cursor = db._query("FOR l IN labels FILTER l.parentLabel == '' RETURN l");
+    let cursor = db._query("FOR l IN labels FILTER l.parentLabel == '' RETURN l.name");
     let m = 0;
-
+    
     let map = {};
 
     while (cursor.hasNext()) {
@@ -14,12 +14,12 @@
 
 	m = (m + 1) % countries.length;
 
-	map[n.name] = c;
+	map[n] = c;
     }
 
-    print("finding location for children");
+    print("finding location for children label");
 
-    cursor = db._query("FOR l IN labels FILTER l.parentLabel != '' RETURN l");
+    cursor = db._query("FOR l IN labels FILTER l.parentLabel != '' RETURN { parentLabel: l.parentLabel, name: l.name }");
 
     while (cursor.hasNext()) {
 	let n = cursor.next();
@@ -50,7 +50,7 @@
 
     db._createEdgeCollection("parent_label");
 
-    cursor = db._query("FOR l IN labels RETURN l");
+    cursor = db._query("FOR l IN labels RETURN l._key");
 
     print("creating entries in labels2");
 
@@ -58,16 +58,21 @@
     let names = {};
 
     while (cursor.hasNext()) {
-	let n = cursor.next();
+	let n = db.labels.document(cursor.next());
 
 	if (n.parentLabel !== "" && n.parentLabel !== undefined) {
 	    parents[n.name] = n.parentLabel;
 	}
 
+        let key = n.id;
+      
 	delete n.parentLabel;
 	delete n.sublabels;
+	delete n.id;
 
 	n.location = map[n.name] || "US";
+	n._key = n.location + ":" + key;
+	n.oid = key;
 
 	let id = db.labels2.save(n);
 
